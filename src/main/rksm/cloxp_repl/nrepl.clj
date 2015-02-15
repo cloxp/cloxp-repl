@@ -7,6 +7,8 @@
         [clojure.tools.nrepl.middleware :as middleware :only (set-descriptor!)])
   (:import clojure.tools.nrepl.transport.Transport))
 
+(def default-bindings {"clojure.core/*print-length*" nil
+                       "clojure.core/*file*" nil})
 
 (defmacro with-string-writer
   [sym body]
@@ -24,7 +26,7 @@
       (doseq [ns required-ns]
         (require (symbol ns))))
     (if bindings
-      (doseq [[name expr] (partition 2 bindings)]
+      (doseq [[name expr] (merge default-bindings (apply hash-map bindings))]
         (swap! session assoc (find-var (symbol name)) (eval expr))))
     (catch Exception e
       (do
