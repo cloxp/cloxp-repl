@@ -4,7 +4,7 @@
   <groupId>org.rksm</groupId>
   <artifactId>cloxp-repl</artifactId>
   <packaging>clojure</packaging>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.1-SNAPSHOT</version>
   <name>${artifactId}</name>
   <description>Eval for cloxp.</description>
   <url>http://maven.apache.org</url>
@@ -114,9 +114,9 @@
 
 
   <scm>
-    <connection>scm:git:git://github.com/rksm/cloxp-trace.git</connection>
-    <developerConnection>scm:git:git://github.com/rksm/cloxp-trace.git</developerConnection>
-    <url>http://github.com/rksm/cloxp-trace</url>
+    <connection>scm:git:git://github.com/rksm/cloxp-repl.git</connection>
+    <developerConnection>scm:git:git://github.com/rksm/cloxp-repl.git</developerConnection>
+    <url>http://github.com/rksm/cloxp-repl</url>
     <tag>HEAD</tag>
   </scm>
 
