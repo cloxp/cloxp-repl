@@ -1,5 +1,6 @@
 (ns rksm.cloxp-repl-test
   (:require [clojure.test :refer :all]
+            [rksm.cloxp-source-reader.core :as src-rdr]
             [rksm.cloxp-repl :refer :all]))
 
 (defn fixture [test]
@@ -18,7 +19,7 @@
              :line 1,
              :column 1}
             {:form '(def x 23), :source "(def x 23)", :line 2, :column 3}]
-           (read-objs "(ns rksm.cloxp-repl-test.dummy-3)\n  (def x 23)\n")))))
+           (src-rdr/read-objs "(ns rksm.cloxp-repl-test.dummy-3)\n  (def x 23)\n")))))
 
 (deftest eval-a-form
   (is (= 5
@@ -26,7 +27,7 @@
 
 (deftest eval-a-def
   (let [expected-meta {:ns *ns*, :name 'x,
-                       :file "NO_SOURCE_FILE", :column 17, :line 31
+                       :file "NO_SOURCE_FILE", :column 17, :line 32
                        :test "123"}]
     (eval-form '(def x 23) *ns* {:add-meta {:test "123"}})
     (let [ref (find-var (symbol (str *ns*) "x"))]
@@ -40,8 +41,7 @@
 (deftest eval-multiple-defs
   (eval-forms ['(def x 23) '(def y 24)] *ns*)
   (is (= 23 (-> (symbol (str *ns*) "x") find-var deref)))
-  (is (= 24 (-> (symbol (str *ns*) "y") find-var deref)))
-  )
+  (is (= 24 (-> (symbol (str *ns*) "y") find-var deref))))
 
 (deftest eval-source-with-sym
   (eval-string "(def y 23)" *ns* {:line-offset 3})
@@ -59,9 +59,5 @@
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 (comment
-
- (meta #'x)
- (test-var #'eval-a-def)
  (run-tests 'rksm.cloxp-repl-test)
-    
  )
