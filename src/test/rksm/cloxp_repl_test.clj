@@ -10,24 +10,13 @@
 
 (use-fixtures :each fixture)
 
-
-(deftest reading
-  
-  (testing "simple read"
-    (is (= [{:form '(ns rksm.cloxp-repl-test.dummy-3),
-             :source "(ns rksm.cloxp-repl-test.dummy-3)",
-             :line 1,
-             :column 1}
-            {:form '(def x 23), :source "(def x 23)", :line 2, :column 3}]
-           (src-rdr/read-objs "(ns rksm.cloxp-repl-test.dummy-3)\n  (def x 23)\n")))))
-
 (deftest eval-a-form
   (is (= 5
          (eval-form '(+ 3 2) *ns*))))
 
 (deftest eval-a-def
   (let [expected-meta {:ns *ns*, :name 'x,
-                       :file "NO_SOURCE_FILE", :column 17, :line 32
+                       :file "NO_SOURCE_FILE", :column 17, :line 21
                        :test "123"}]
     (eval-form '(def x 23) *ns* {:add-meta {:test "123"}})
     (let [ref (find-var (symbol (str *ns*) "x"))]
@@ -50,7 +39,7 @@
           :name 'y,
           ; :file "rksm/cloxp_repl_test.clj",
           :line 4, :column 1,
-          :end-column 7, :end-line 4
+          :end-column 11, :end-line 4
           :file "NO_SOURCE_FILE"
           :source "(def y 23)"
           :form '(def y 23)}
