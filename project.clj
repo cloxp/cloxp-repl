@@ -4,6 +4,7 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/data.json "0.2.3"]
                  [org.clojure/tools.nrepl "0.2.7"]
+                 [com.keminglabs/cljx "0.6.0"]
                  [org.rksm/cloxp-source-reader "0.1.0-SNAPSHOT"]]
   :source-paths ["src/main"]
   :test-paths ["src/test"]
