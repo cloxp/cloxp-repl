@@ -1,57 +1,14 @@
 (ns rksm.cloxp-repl.cljx
   (:require [cljx.core :as cljx]
             [cljx.rules :as rules]
+            [rksm.cloxp-repl.nrepl :as cloxp-nrepl]
             [clojure.tools.nrepl.middleware.load-file :as nrepl-load]
             [clojure.tools.nrepl.middleware.interruptible-eval :as eval]
             [clojure.tools.nrepl.middleware :refer [set-descriptor!]]))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-; rk 2015-03-16:
-; This is taken from cljx.repl-middleware, will require changes once features
-; are supported in Clojure 1.7
-
-(defn- find-resource
-  [name]
-  (if-let [cl (clojure.lang.RT/baseLoader)]
-    (.getResource cl name)
-    (ClassLoader/getSystemResourceAsStream name)))
-
-; clojure.core/load from ~Clojure 1.6.0
-; clojure.core/load hasn't really changed since ~2009, so monkey patching here
-; seems entirely reasonable/safe.
-(defn- cljx-load
-  "Loads Clojure code from resources in classpath. A path is interpreted as
-classpath-relative if it begins with a slash or relative to the root
-directory for the current namespace otherwise."
-  {:added "1.0"}
-  [& paths]
-  (doseq [^String path paths]
-    (let [^String path (if (.startsWith path "/")
-                          path
-                          (str (#'clojure.core/root-directory (ns-name *ns*)) \/ path))]
-      (when @#'clojure.core/*loading-verbosely*
-        (printf "(clojure.core/load \"%s\")\n" path)
-        (flush))
-      (#'clojure.core/check-cyclic-dependency path)
-      (when-not (= path (first @#'clojure.core/*pending-paths*))
-        (with-bindings {#'clojure.core/*pending-paths* (conj @#'clojure.core/*pending-paths* path)}
-          (let [base-resource-path (.substring path 1)
-                cljx-path (str base-resource-path ".cljx")]
-            (if-let [cljx (find-resource cljx-path)]
-              (do
-                (when @#'clojure.core/*loading-verbosely*
-                  (printf "Transforming cljx => clj from %s.cljx\n" base-resource-path))
-                (-> (slurp cljx)
-                    (cljx/transform rules/clj-rules)
-                    java.io.StringReader.
-                    (clojure.lang.Compiler/load base-resource-path
-                                                (last (re-find #"([^/]+$)" cljx-path)))))
-              (clojure.lang.RT/load base-resource-path))))))))
-
-(defonce ^:private clojure-load load)
-
-; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-; patching the nrepl load-file handler
+; patching the nrepl load-file handler, somehwat similar to
+; com.keminglabs/cljx.repl-middleware
 
 (defonce ^:private nrepl-load-file-code nrepl-load/load-file-code)
 
@@ -77,11 +34,25 @@ directory for the current namespace otherwise."
                          :returns)}}})
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+; patching nrepl eval
 
-(defn enable-cljx-load-support!
-  []
-  (alter-var-root #'load (constantly cljx-load)))
+(defn wrap-nrepl-eval-for-cljx
+  [h]
+  (fn [{:keys [op code] :as msg}]
+    (if (not= op "cloxp-eval")
+      (h msg)
+      (h (assoc msg :code (cljx/transform code rules/clj-rules))))))
 
-(defn disable-cljx-load-support!
-  []
-  (alter-var-root #'load (constantly clojure-load)))
+(set-descriptor! #'wrap-nrepl-eval-for-cljx
+  {:requires #{"clone"}
+   :expects #{#'cloxp-nrepl/wrap-cloxp-eval}
+   :handles {"cloxp-eval"
+             {:doc "cljx transform"
+              :requires {"code" "Source string of what should be evaluated."}
+              :optional {"required-ns" "names of namespaces that needs to be loaded for evaluating `code`"
+                         "bindings" "map, keys: names of dynamic vars, vals: expressions. thread-local bindings for evaluating `code`"}
+              :returns (-> (meta #'eval/interruptible-eval)
+                         ::clojure.tools.nrepl.middleware/descriptor
+                         :handles
+                         (get "eval")
+                         :returns)}}})
