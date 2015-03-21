@@ -39,9 +39,9 @@
           :name 'y,
           ; :file "rksm/cloxp_repl_test.clj",
           :line 4, :column 1,
-          :end-column 11, :end-line 4
+          :end-column 1, :end-line 5
           :file "NO_SOURCE_FILE"
-          :source "(def y 23)"
+          :source "(def y 23)\n"
           :form '(def y 23)}
         (-> (symbol (str *ns*) "y") find-var meta))))
 
