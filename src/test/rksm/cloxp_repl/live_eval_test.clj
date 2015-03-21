@@ -8,9 +8,9 @@
    (let [code "(def x 23)\n\n(+ x 2)\n3"
          {:keys [defs results]} (live-eval-code code :ns 'user)]
      (is (= [{:pos {:line 1, :column 1}, :out "",
-              :source "(def x 23)" :value "x => 23", :def? true}
-             {:pos {:line 3, :column 1}, :out "", :value "25", :source "(+ x 2)", :def? false}
-             {:pos {:line 4, :column 1}, :out "", :value "3", :source "3", :def? false}]
+              :source "(def x 23)\n" :value "x => 23", :def? true}
+             {:pos {:line 3, :column 1}, :out "", :value "25", :source "(+ x 2)\n", :def? false}
+             {:pos {:line 4, :column 1}, :out "", :value "3", :source "3\n", :def? false}]
             results))
      (is (= ['x] (keys defs)))))
 
@@ -18,7 +18,7 @@
     (let [code "(/ 1 0)"
          {:keys [defs results]} (live-eval-code code :ns 'user)]
      (is (= [{:pos {:line 1, :column 1}, :out "",
-              :source "(/ 1 0)", :def? false,
+              :source "(/ 1 0)\n", :def? false,
               :value "#<ArithmeticException java.lang.ArithmeticException: Divide by zero>"}]
             results))))
   
@@ -26,7 +26,7 @@
     (let [code "(pr 123)"
          {:keys [defs results]} (live-eval-code code :ns 'user)]
      (is (= [{:pos {:line 1, :column 1}, :out "123",
-              :source "(pr 123)", :def? false, :value "nil"}]
+              :source "(pr 123)\n", :def? false, :value "nil"}]
             results)))))
 
 (deftest generates-def-changes
