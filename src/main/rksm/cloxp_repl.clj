@@ -34,12 +34,13 @@
   (doall (map #(eval-form % ns opts) forms)))
 
 (defn eval-string
-  [string ns & [{:keys [line-offset] :or {line-offset 0} :as opts}]]
-  (doall
-    (for [read (src-rdr/read-objs string)]
-      (let [line (partial + line-offset)
-            evaled (eval-form (:form read) ns {assoc opts :add-meta read})]
-        (if (src-rdr/def? (:form read))
-          (alter-meta! evaled (comp #(update-in % [:line] line)
-                                    #(update-in % [:end-line] line))))
-        evaled))))
+  [string ns & [{:keys [line-offset file] :or {line-offset 0} :as opts}]]
+  (let [cljx? (boolean (re-find #"\.cljx$" (str file)))]
+   (doall
+     (for [read (src-rdr/read-objs string {:cljx? cljx?})]
+       (let [line (partial + line-offset)
+             evaled (eval-form (:form read) ns (assoc opts :add-meta read))]
+         (if (src-rdr/def? (:form read))
+           (alter-meta! evaled (comp #(update-in % [:line] line)
+                                     #(update-in % [:end-line] line))))
+         evaled)))))
