@@ -1,5 +1,8 @@
 (ns rksm.cloxp-repl
+  (:refer-clojure :exclude [load-file])
   (:require [rksm.cloxp-source-reader.core :as src-rdr]
+            [cljx.core :as cljx]
+            [cljx.rules :as rules]
             [clojure.string :as s]))
 
 (def ^{:dynamic true,
@@ -8,23 +11,25 @@
 
 (defn eval-expr
   [form ns & [{file :file}]]
-  (binding [*ns* ns *file* file] (eval form)))
+  (binding [*ns* ns *file* file]
+    (eval form)))
 
 (defn eval-def
   [form ns & [{:keys [add-meta keep-meta] :as opts}]]
-  (let [name (src-rdr/name-of-def form)
+  (let [def? (src-rdr/def? form)
+        name (if def? (src-rdr/name-of-def form))
         sym (symbol (str ns) (str name))
-        keep-meta (if keep-meta (some-> (find-var sym) meta (select-keys keep-meta)))
+        keep-meta (if keep-meta (some-> (find-var sym)
+                                  meta (select-keys keep-meta)))
         m (merge add-meta keep-meta)]
     (let [new-def (eval-expr form ns opts)]
-      (alter-meta! new-def merge m)
+      (if def? (alter-meta! new-def merge m))
       new-def)))
 
 (defn eval-form
   "possible keys in opts:
   :file :add-meta :keep-meta"
   [form ns & [opts]]
-
   (cond
     (src-rdr/def? form) (eval-def form ns opts)
     :default (eval-expr form ns opts)))
