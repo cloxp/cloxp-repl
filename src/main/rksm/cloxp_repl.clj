@@ -49,3 +49,22 @@
            (alter-meta! evaled (comp #(update-in % [:line] line)
                                      #(update-in % [:end-line] line))))
          evaled)))))
+
+(defn load-file
+  "Load-file equivalent"
+  [source source-path]
+  (let [file-name (some-> source-path
+                    (s/split (re-pattern (java.io.File/separator)))
+                    last)
+        ext (if source-path (str (re-find #"\.[^\.]+$" (str source-path))))
+        cljx? (= ext ".cljx")
+        source (if cljx? (cljx/transform source rules/clj-rules) source)]
+    (eval
+     (read-string
+      (apply format
+        "(clojure.lang.Compiler/load (java.io.StringReader. %s) %s %s)"
+        (map (fn [item]
+               (binding [*print-length* nil
+                         *print-level* nil]
+                 (pr-str item)))
+             [source source-path file-name]))))))
