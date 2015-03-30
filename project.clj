@@ -1,6 +1,7 @@
 (defproject org.rksm/cloxp-repl "0.1.1-SNAPSHOT"
   :description "Source reading, parsing, and querying for cloxp."
-  :license "MIT"
+  :license {:name "MIT License"
+            :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/data.json "0.2.3"]
                  [org.clojure/tools.nrepl "0.2.7"]
