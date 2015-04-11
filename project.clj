@@ -1,4 +1,4 @@
-(defproject org.rksm/cloxp-repl "0.1.1"
+(defproject org.rksm/cloxp-repl "0.1.2-SNAPSHOT"
   :description "Source reading, parsing, and querying for cloxp."
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
@@ -6,7 +6,7 @@
                  [org.clojure/data.json "0.2.3"]
                  [org.clojure/tools.nrepl "0.2.7"]
                  [com.keminglabs/cljx "0.6.0"]
-                 [org.rksm/cloxp-source-reader "0.1.1"]]
+                 [org.rksm/cloxp-source-reader "0.1.2-SNAPSHOT"]]
   :source-paths ["src/main"]
   :test-paths ["src/test"]
   :scm {:url "git@github.com:cloxp/cloxp-repl.git"}

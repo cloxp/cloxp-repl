@@ -2,81 +2,48 @@
   (:require [clojure.test :refer :all]
             [rksm.cloxp-repl.live-eval :refer :all]))
 
+(defn fixture [test]
+  (test)
+  (ns-unmap 'user 'x)
+  (ns-unmap 'user 'y))
+
+(use-fixtures :each fixture)
+
 (deftest eval-code-and-gather-results
   
   (testing "eval statements"
    (let [code "(def x 23)\n\n(+ x 2)\n3"
-         {:keys [defs results]} (live-eval-code code :ns 'user)]
-     (is (= [{:pos {:line 1, :column 1}, :out "",
-              :source "(def x 23)\n" :value "x => 23", :def? true}
-             {:pos {:line 3, :column 1}, :out "", :value "25", :source "(+ x 2)\n", :def? false}
-             {:pos {:line 4, :column 1}, :out "", :value "3", :source "3\n", :def? false}]
-            results))
-     (is (= ['x] (keys defs)))))
+         results (map (juxt :printed :out :error)
+                      (live-eval-code code :ns 'user))]
+     (is (= [["user/x => 23" "" nil] ["25" "" nil] ["3" "" nil]] results))))
 
   (testing "with errors"
     (let [code "(/ 1 0)"
-         {:keys [defs results]} (live-eval-code code :ns 'user)]
-     (is (= [{:pos {:line 1, :column 1}, :out "",
-              :source "(/ 1 0)\n", :def? false,
-              :value "#<ArithmeticException java.lang.ArithmeticException: Divide by zero>"}]
+          results (map :printed (live-eval-code code :ns 'user))]
+     (is (= ["#<ArithmeticException java.lang.ArithmeticException: Divide by zero>"]
             results))))
   
   (testing "stdout"
-    (let [code "(pr 123)"
-         {:keys [defs results]} (live-eval-code code :ns 'user)]
-     (is (= [{:pos {:line 1, :column 1}, :out "123",
-              :source "(pr 123)\n", :def? false, :value "nil"}]
-            results)))))
-
-(deftest generates-def-changes
-  (let [tests [{:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected {:added #{'x}, :removed #{}, :changed #{}}}
-               {:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{}, :changed #{}}}
-               {:code "(def x 24)\n\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{}, :changed #{'x}}}
-               {:code "\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{'x}, :changed #{}}}]]
-    (loop [def-state {} tests tests]
-      (when-not (empty? tests)
-        (let [[{:keys [code expected]} & rest] tests
-              {:keys [changes results] :as new-state}
-              (live-eval-code-with-changes code :ns 'user :env def-state)]
-          (is (= expected changes) code)
-          (recur new-state rest))))))
-
-(deftest disappearing-defs-are-removed
-  (let [tests [{:code "(def x 23)"
-                :expected {:added #{'x}, :removed #{}, :changed #{}}}
-               {:code "3"
-                :expected {:added #{}, :removed #{'x}, :changed #{}}}]]
-    (loop [def-state {} tests tests]
-      (when-not (empty? tests)
-        (let [[{:keys [code expected]} & rest] tests
-              {:keys [changes results] :as new-state}
-              (live-eval-code-with-changes code :ns 'user :env def-state)]
-          (is (= expected changes) code)
-          (recur new-state rest))))
-    (is (nil? (-> 'user ns-interns (get 'x))))))
+    (let [results (map (juxt :printed :out) (live-eval-code "(pr 123)" :ns 'user))]
+      (is (= [["nil" "123"]] results)))))
 
 (deftest keeping-changes-test
   (let [tests [{:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected {:added #{'x}, :removed #{}, :changed #{}}}
+                :expected ["user/x => 23" "25" "3"]}
                {:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{}, :changed #{}}}
+                :expected ["user/x => 23" "25" "3"]}
                {:code "(def x 24)\n\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{}, :changed #{'x}}}
+                :expected ["user/x => 24" "26" "3"]}
                {:code "\n(+ x 2)\n3"
-                :expected {:added #{}, :removed #{'x}, :changed #{}}}]]
+                :expected ["#<CompilerException java.lang.RuntimeException: Unable to resolve symbol: x in this context, compiling:(NO_SOURCE_FILE:2:1)>" "3"]}]]
     (doseq [t tests]
       (let [{:keys [code expected]} t
-            {:keys [changes results]} (live-eval-code-keeping-env
-                                       code
-                                       :ns 'user
-                                       :id 'keeping-changes-test
-                                       :reset-timeout 100)]
-        (is (= expected changes))
+            results (map :printed (live-eval-code-keeping-env
+                                   code
+                                   :ns 'user
+                                   :id 'keeping-changes-test
+                                   :reset-timeout 100))]
+        (is (= expected results))
         (Thread/sleep 50)))
     (is (not (nil? (get @envs 'keeping-changes-test))))
     (Thread/sleep 110)
@@ -86,5 +53,6 @@
 
 (comment
  (run-tests *ns*)
+
  (live-eval-code "(/ 1 0)" :ns 'user)
  )

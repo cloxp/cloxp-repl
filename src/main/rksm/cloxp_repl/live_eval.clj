@@ -1,6 +1,7 @@
 (ns rksm.cloxp-repl.live-eval
   (:require [clojure.string :as s]
             [clojure.set :refer [difference union]]
+            [rksm.cloxp-repl :refer [eval-changed]]
             [rksm.cloxp-source-reader.core :as src-rdr]))
 
 (defn mapply [f & args]
@@ -42,52 +43,28 @@
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-(defmulti process-result class)
+(defn- result-type
+  [{:keys [value error]}]
+  (class (or error value)))
+
+(defmulti ^:private process-result result-type)
 
 (defmethod process-result clojure.lang.Var
-  [var]
+  [{var :value :as result}]
   (let [m (meta var)
         name (if (= *ns* (:ns m))
                (:name m)
-               (s/join "/" ((juxt (comp str :ns) (constantly "/") (comp str :name)) m)))
+               (str (:ns m) "/" (:name m)))
         val (deref var)]
-    (str name " => " (truncate (str val) 20))))
+    (assoc result :printed (str name " => " (truncate (str val) 20)))))
 
 (defmethod process-result java.lang.Exception
-  [e]
-  (pr-str e))
+  [{e :error :as result}]
+  (assoc result :printed (pr-str e)))
 
 (defmethod process-result :default
-  [x]
-  (pr-str x))
-
-(defn eval-code
-  [{:keys [form line column source]}]
-  (let [s (java.io.StringWriter.)
-        value (process-result
-               (binding [*out* s]
-                 (try (eval form) (catch Exception e e))))
-        out (str s)]
-    {:pos {:line line :column column},
-     :value value, :out out, :source source,
-     :form form, :def? (src-rdr/def? form)}))
-
-(defn prev-def-result
-  [{form :form, :as expr} {:keys [defs], :as env}]
-  (get defs (src-rdr/name-of-def form)))
-
-(defn changed?
-  [{new-src :source, :as expr} env]
-  (let [{old-source :source} (prev-def-result expr env)]
-    (not= new-src old-source)))
-
-(defn make-env
-  [eval-result]
-  {:results (map #(dissoc % :form) eval-result)
-   :defs (apply hash-map
-           (->> eval-result
-             (filter :def?)
-             (mapcat (juxt (comp src-rdr/name-of-def :form) identity))))})
+  [{x :value :as result}]
+  (assoc result :printed (pr-str x)))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 ; API
@@ -95,36 +72,14 @@
 (defn live-eval-code
   "Takes source code and evaluates the top-level statements in it one-by-one.
   Will return a map {:results [{:value :pos :def? :source}], :defs {defnames -> result}}"
-  [code & {:keys [file ns env], :as opts}]
-  (binding [*ns* (if ns (find-ns ns) *ns*)
-            *file* file]
-    (let [eval-result
-          (map (fn [{:keys [form line column] :as expr}]
-                 (if (or (not (src-rdr/def? form)) (changed? expr env))
-                   (eval-code expr)
-                   (assoc (prev-def-result expr env)
-                          :pos {:line line :column column})))
-               (src-rdr/read-objs code))
-          changed-env (make-env eval-result)]
-      changed-env)))
-
-(defn live-eval-code-with-changes
-  "Will compare source of defs in env with defs that are defined in code. Will
-  only eval those defs for which the source has changed. This avoids
-  unnecessarily re-defining defs and the side effects this has."
-  [code & {:keys [env ns] :or {ns 'user} :as opts}]
-  (let [{old-defs :defs} env
-        {defs :defs, :as eval-result} (mapply live-eval-code code opts)
-        added (difference (set (keys defs)) (set (keys old-defs)))
-        removed (difference (set (keys old-defs)) (set (keys defs)))
-        changed (set (filter
-                      (fn [def-name]
-                        (let [get-val (fn [defs] (-> defs (get def-name) :value))]
-                          (not= (get-val defs) (get-val old-defs))))
-                      (difference (set (keys defs)) added)))
-        changes {:added added, :removed removed, :changed changed}]
-    (doseq [def-name removed] (ns-unmap ns def-name))
-    (assoc eval-result :changes changes)))
+  [code & {:keys [prev-result ns] :or {prev-result []} :as opts}]
+  (binding [*ns* (cond
+                   (nil? ns) *ns*
+                   (symbol? ns) (find-ns ns)
+                   :default ns)]
+    (let [result (eval-changed (src-rdr/read-objs code) prev-result ns opts)
+         pretty-result (map process-result result)]
+     pretty-result)))
 
 (defn live-eval-code-keeping-env
   "Use this version of eval to have the live-eval state maintained for a
@@ -133,12 +88,11 @@
   [code & {:keys [id reset-timeout] :as opts}]
   {:pre [(not (nil? id))]
    :post [(contains? @envs id)]}
-  (let [prev-env (get @envs id)
-        eval-result (mapply
-                     live-eval-code-with-changes
-                     code (assoc opts :env prev-env))]
+  (let [prev-result (get @envs id)
+        eval-result (mapply live-eval-code
+                            code (assoc opts :prev-result prev-result))]
     (swap! envs assoc id eval-result)
     (when reset-timeout
       (do-debounced
-       id reset-timeout #(swap! envs dissoc id)))
+        id reset-timeout #(swap! envs dissoc id)))
     eval-result))
