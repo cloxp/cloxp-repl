@@ -4,6 +4,21 @@
             [rksm.cloxp-source-reader.core :as src-rdr]
             [rksm.cloxp-repl :refer :all]))
 
+(defonce this-file (-> *ns* 
+                     ns-name munge
+                     (clojure.string/replace #"\." "/")
+                     (str ".clj")
+                     clojure.java.io/resource .getFile))
+
+(defmacro lookup-var
+  [var-sym]
+  `(let [var# (-> (symbol (str *ns*) (str '~var-sym)) find-var)]
+     (if (and var# (bound? var#)) var# nil))) 
+
+(defmacro lookup
+  [var-sym]
+  `(some-> (lookup-var ~var-sym) deref)) 
+
 (defn fixture [test]
   (test)
   (ns-unmap *ns* 'x)
@@ -16,37 +31,36 @@
          (eval-form '(+ 3 2) *ns*))))
 
 (deftest eval-a-def
-  (let [expected-meta {:ns *ns*, :name 'x,
-                       :file "NO_SOURCE_FILE", :column 17, :line 22
-                       :test "123"}]
-    (eval-form '(def x 23) *ns* {:add-meta {:test "123"}})
-    (let [ref (find-var (symbol (str *ns*) "x"))]
-      (is (= 23 (deref ref)))
-      (is (= expected-meta (meta ref))))
-    (eval-form '(def x 23) *ns* {:keep-meta [:line]})
-    (let [ref (find-var (symbol (str *ns*) "x"))]
-      (is (= 23 (deref ref)))
-      (is (= (dissoc expected-meta :test) (meta ref))))))
+  (binding [*file* this-file]
+    (let [expected-meta {:ns *ns*, :name 'x,
+                         :file this-file,
+                         :column 19, :line 39
+                         :test "123"}]
+      (eval-form '(def x 23) *ns* {:add-meta {:test "123"}})
+      (is (= 23 (lookup x)))
+      (is (= expected-meta (-> x lookup-var meta (dissoc :end-line :end-column))))
+      (eval-form '(def x 23) *ns* {:keep-meta [:line :end-line]})
+      (is (= 23 (lookup x)))
+      (is (= (dissoc expected-meta :test) (-> x lookup-var meta (dissoc :end-line :end-column)))))))
 
 (deftest eval-multiple-defs
   (eval-forms ['(def x 23) '(def y 24)] *ns*)
-  (is (= 23 (-> (symbol (str *ns*) "x") find-var deref)))
-  (is (= 24 (-> (symbol (str *ns*) "y") find-var deref))))
+  (is (= 23 (lookup x)))
+  (is (= 24 (lookup y))))
 
 (deftest eval-source-with-sym
-  (let [[{:keys [value error]}] (eval-string "(def y 23)" *ns* {:line-offset 3})]
-    (is (var? value))
-    (is (nil? error)))
-  (is (= 23 (-> (symbol (str *ns*) "y") find-var deref)))
+  (binding [*file* this-file]
+    (let [[{:keys [value error]}] (eval-string "(def y 23)" *ns* {:line-offset 3})]
+      (is (var? value))
+      (is (nil? error))))
+  (is (= 23 (lookup y)))
   (is (= {:ns *ns*,
           :name 'y,
-          ; :file "rksm/cloxp_repl_test.clj",
           :line 4, :column 1,
-          :end-column 1, :end-line 5
-          :file "NO_SOURCE_FILE"
+          :file this-file
           :source "(def y 23)\n"
           :form '(def y 23)}
-        (-> (symbol (str *ns*) "y") find-var meta))))
+         (-> y lookup-var meta (dissoc :end-line :end-column)))))
 
 (deftest eval-changed-test
   
@@ -59,10 +73,10 @@
                :value 'old
                :error nil :out ""}
               {:parsed (second new-objs)
-               :value (-> (symbol (str *ns*) "y") find-var)
+               :value (lookup-var y)
                :error nil :out ""}]
              result))
-      (is (nil? (-> (symbol (str *ns*) "x") find-var)))))
+      (is (nil? (lookup-var x)))))
   
   (testing "eval unchanged non-defs"
     (let [prev-objs (src-rdr/read-objs "(+ 3 4)")
@@ -92,6 +106,30 @@
           prev-result (map (fn [r] {:parsed r :value 'old}) prev-objs)
           _ (map :value (eval-changed new-objs prev-result *ns*))]
       (is (nil? (-> (symbol (str *ns*) "x") find-var))))))
+
+(deftest eval-changed-from-source-test
+  (testing "only eval changed top level forms"
+    (let [old-code "(def x 23) (def y 24) (+ 3 4) (+ 1 2)"
+          new-code "(def x 23) (def y 25) (+ 3 4) (+ 1 3)"
+          result (eval-changed-from-source new-code old-code *ns*)
+          vals (map :value result)
+          expected-vals [nil
+                         (lookup-var y)
+                         7
+                         4]]
+      (is (= expected-vals vals))
+      (is (nil? (lookup x)))
+      (is (= 25 (lookup y))))))
+
+(deftest update-mets-of-unchanged-defs
+  
+  (testing "only eval changed top level forms"
+    (let [code-1 ""
+          code-2 "(def x 23) (def y 24)"
+          code-3 "(def x 23) \n(def y 24)"]
+      (eval-changed-from-source code-2 code-1 *ns*)
+      (eval-changed-from-source code-3 code-2 *ns*)
+      (is (= [2 1] (-> (lookup-var y) meta ((juxt :line :column))))))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 

@@ -75,8 +75,8 @@
                    (symbol? ns) (find-ns ns)
                    :default ns)]
     (let [result (eval-changed (src-rdr/read-objs code) prev-result ns opts)
-         pretty-result (map process-result result)]
-     pretty-result)))
+          pretty-result (map process-result result)]
+      pretty-result)))
 
 (defn live-eval-code-keeping-env
   "Use this version of eval to have the live-eval state maintained for a
