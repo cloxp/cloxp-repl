@@ -15,7 +15,7 @@
    (let [code "(def x 23)\n\n(+ x 2)\n3"
          results (map (juxt :printed :out :error)
                       (live-eval-code code :ns 'user))]
-     (is (= [["user/x => 23" "" nil] ["25" "" nil] ["3" "" nil]] results))))
+     (is (= [["x => 23" "" nil] ["25" "" nil] ["3" "" nil]] results))))
 
   (testing "with errors"
     (let [code "(/ 1 0)"
@@ -29,11 +29,11 @@
 
 (deftest keeping-changes-test
   (let [tests [{:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected ["user/x => 23" "25" "3"]}
+                :expected ["x => 23" "25" "3"]}
                {:code "(def x 23)\n\n(+ x 2)\n3"
-                :expected ["user/x => 23" "25" "3"]}
+                :expected ["x => 23" "25" "3"]}
                {:code "(def x 24)\n\n(+ x 2)\n3"
-                :expected ["user/x => 24" "26" "3"]}
+                :expected ["x => 24" "26" "3"]}
                {:code "\n(+ x 2)\n3"
                 :expected ["#<CompilerException java.lang.RuntimeException: Unable to resolve symbol: x in this context, compiling:(NO_SOURCE_FILE:2:1)>" "3"]}]]
     (doseq [t tests]

@@ -52,11 +52,8 @@
 (defmethod process-result clojure.lang.Var
   [{var :value :as result}]
   (let [m (meta var)
-        name (if (= *ns* (:ns m))
-               (:name m)
-               (str (:ns m) "/" (:name m)))
         val (deref var)]
-    (assoc result :printed (str name " => " (truncate (str val) 20)))))
+    (assoc result :printed (str (:name m) " => " (truncate (str val) 20)))))
 
 (defmethod process-result java.lang.Exception
   [{e :error :as result}]

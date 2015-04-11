@@ -10,34 +10,34 @@
        :doc "can be set by tooling to have larger code chunks accessible without
        special escaping"} *repl-source*)
 
-(defn eval-expr
-  [form ns & [{file :file, :or {file "NO_SOURCE_FILE"}}]]
-  (binding [*ns* (if (symbol? ns) (find-ns ns) ns)
-            *file* file]
-    (eval form)))
-
 (defn eval-def
   [form ns & [{:keys [add-meta keep-meta] :as opts}]]
   (let [def? (src-rdr/def? form)
         name (if def? (src-rdr/name-of-def form))
         sym (symbol (str ns) (str name))
-        keep-meta (if keep-meta (some-> (find-var sym)
-                                  meta (select-keys keep-meta)))
+        keep-meta (if keep-meta
+                    (some-> (find-var sym)
+                      meta (select-keys keep-meta)))
         m (merge add-meta keep-meta)]
-    (let [new-def (eval-expr form ns opts)]
+    (let [new-def (eval form)]
       (if def? (alter-meta! new-def merge m))
       new-def)))
 
 (defn eval-form
   "possible keys in opts: :file :add-meta :keep-meta.
   Returns a triple: [value error output]"
-  [form ns & [opts]]
+  [form ns & [{file :file, :or {file "NO_SOURCE_FILE"} :as opts}]]
   (let [s (java.io.StringWriter.)
-        [v e] (binding [*out* s]
+        [v e] (binding [*out* s
+                        *file* file
+                        *ns* (cond
+                               (nil? ns) *ns*
+                               (symbol? ns) (find-ns ns)
+                               :default ns)]
                 (try
-                  [(cond
-                     (src-rdr/def? form) (eval-def form ns opts)
-                     :default (eval-expr form ns opts))
+                  [(if (src-rdr/def? form)
+                     (eval-def form ns opts)
+                     (eval form))
                    nil]
                   (catch Exception e [nil e])))]
     [v e (str s)]))
@@ -74,8 +74,8 @@
   rksm.cloxp-repl.code-diff/diff-read-objs). For unmodified objs return the
   previous eval result (out, error, value)"
   [objs prev-result ns & [{:keys [unmap-removed? eval-unchanged-exprs?]
-                                             :or {unmap-removed? true, eval-unchanged-exprs? true}
-                                             :as opts}]]
+                           :or {unmap-removed? true, eval-unchanged-exprs? true}
+                           :as opts}]]
   (let [changed (diff/diff-read-objs (map :parsed prev-result) objs)
         find-prev-result (fn [{:keys [line column]}]
                            (->> prev-result
