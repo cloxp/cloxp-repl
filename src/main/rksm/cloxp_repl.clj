@@ -35,7 +35,7 @@
                       meta (select-keys keep-meta)))
         m (merge add-meta keep-meta)]
     (let [new-def (eval form)]
-      (if def? (alter-meta! new-def merge m))
+      (if (var? new-def) (alter-meta! new-def merge m))
       new-def)))
 
 (defn eval-form
@@ -62,7 +62,7 @@
    & [{:keys [line-offset throw-errors?] :or {line-offset 0, throw-errors? false} :as opts}]]
   (let [[v e o] (eval-form form ns (update-in opts [:add-meta] merge parsed))]
     (if (and e throw-errors?) (throw e))
-    (if (and (not e) v (not= 0 line-offset) (src-rdr/def? form))
+    (if (and (not e) v (not= 0 line-offset) (var? v))
       (alter-meta! v (comp #(update-in % [:line] + line-offset)
                            #(update-in % [:end-line] + line-offset))))
     {:parsed parsed :value v :error e :out o}))
