@@ -10,8 +10,6 @@
 ; patching the nrepl load-file handler, somehwat similar to
 ; com.keminglabs/cljx.repl-middleware
 
-(defonce ^:private nrepl-load-file-code nrepl-load/load-file-code)
-
 (defn wrap-nrepl-load-file-for-cljx
   [h]
   (fn [{:keys [op file] :as msg}]

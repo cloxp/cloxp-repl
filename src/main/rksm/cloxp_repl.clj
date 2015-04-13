@@ -2,9 +2,17 @@
   (:refer-clojure :exclude [load-file])
   (:require [rksm.cloxp-source-reader.core :as src-rdr]
             [rksm.cloxp-repl.code-diff :as diff]
+            [rksm.system-files :refer [file
+                                       source-for-ns
+                                       file-for-ns
+                                       ns-name->rel-path]]
+            [rksm.system-files.cljx :refer [cljx-file?]]
             [cljx.core :as cljx]
             [cljx.rules :as rules]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [clojure.java.io :as io])
+  (:import (clojure.lang Compiler)
+           (java.io StringReader File)))
 
 (def ^{:dynamic true,
        :doc "can be set by tooling to have larger code chunks accessible without
@@ -125,34 +133,65 @@
   [source prev-source ns & [{:keys [file] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
   (binding [*ns* (ensure-ns ns) *file* (str file)]
     (let [objs (src-rdr/read-objs source)
-          pseudo-prev-result (map (partial hash-map :parsed) 
+          pseudo-prev-result (map (partial hash-map :parsed)
                                   (src-rdr/read-objs prev-source))]
       (eval-changed objs pseudo-prev-result ns opts))))
 
+; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+(defn- compiler-load
+  [source path & [fname]]
+  (let [fname (or fname (-> path io/file .getName))]
+    (binding [*file* path]
+      (Compiler/load
+       (StringReader. source)
+       path fname))))
+
+(defn load-file
+  "Load-file equivalent"
+  [source path & [{:keys [ns old-source cljx-rules] :as opts}]]
+  (let [file-name (some-> path io/file .getName)
+        ext (some->> file-name (re-find #"\.[^\.]+$"))
+        cljx? (= ext ".cljx")
+        x-rules (if cljx? (or cljx-rules rules/clj-rules))
+        source (if cljx? (cljx/transform source x-rules) source)
+        old-source (if (and old-source cljx?)
+                     (cljx/transform old-source x-rules)
+                     old-source)
+        ns (if old-source
+             (or ns
+                 (src-rdr/read-ns-sym source)
+                 'user))]
+    (if old-source
+      (some-> source
+        (eval-changed-from-source old-source ns {:file path, :throw-errors? true})
+        last :value)
+      (compiler-load source path file-name))))
+
+(defn require-ns
+  [ns-sym & [file-name]]
+  (try 
+    (require ns-sym :reload)
+    (catch java.io.FileNotFoundException e
+      (if-let [file (file-for-ns ns-sym file-name #".cljx?$")]
+         (let [ext (-> file .getName (re-find #"\.[^\.]+$"))
+               relative-name (or file-name (ns-name->rel-path ns-name ext))]
+           (load-file (slurp file) relative-name))
+         (throw e)))))
+
+; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 (comment
+
+ (compiler-load "(+ 1 1) (+ 1 2)" "foo.clj")
+ (load-file "(+ 1 1) (+ 1 2)" "foo.clj")
+ (load-file
+  "(+ 1 1) #+cljs (+ 1 2) #+clj (+ 1 3)" "foo.cljx"
+  {:old-source "(+ 1 1) (+ 1 2)"})
+ 
  (let [prev-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 2)")
        new-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 3)")
        env (map (fn [r] {:parsed r :value 'old}) prev-objs)]
    (->> (eval-changed new-objs env 'user) (map :value)))
  ; => [7 'old 4]
  )
-; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
-(defn load-file
-  "Load-file equivalent"
-  [source source-path]
-  (let [file-name (some-> source-path
-                    (s/split (re-pattern (java.io.File/separator)))
-                    last)
-        ext (if source-path (str (re-find #"\.[^\.]+$" (str source-path))))
-        cljx? (= ext ".cljx")
-        source (if cljx? (cljx/transform source rules/clj-rules) source)]
-    (eval
-     (read-string
-      (apply format
-        "(clojure.lang.Compiler/load (java.io.StringReader. %s) %s %s)"
-        (map (fn [item]
-               (binding [*print-length* nil
-                         *print-level* nil]
-                 (pr-str item)))
-             [source source-path file-name]))))))
