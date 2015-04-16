@@ -20,7 +20,6 @@
   "a replacement for clojure.tools.nrepl.middleware.pr-values/pr-values that can pretty print"
   [h]
   (fn [{:keys [op ^Transport transport pp pp-level] :as msg}]
-    msg
     (h (assoc msg :transport
               (reify Transport
                 (recv [this] (.recv transport))
@@ -59,8 +58,45 @@
 (def default-bindings {"clojure.core/*print-length*" nil
                        "clojure.core/*file*" nil})
 
+(defn- wrap-out-writer
+  "The default writer attached to nrepl sessions will completely capture all
+  output. Cloxp will get the contents of *err* and *out* when the evaluation is
+  done and present them to the user, however, computations started in that
+  evaluation will still have the writers bound to the nrepl output. Since cloxp
+  does not record output send after the evaluation is done we will pipe all
+  output by default to system out as well, this way users can watch the process
+  for additional output."
+  [^java.io.Writer writer]
+  (let [sys-out (java.io.PrintWriter. System/out)]
+    (java.io.PrintWriter.
+     (proxy [java.io.Writer] []
+       (close []
+              (.flush sys-out)
+              (.flush writer))
+       (write [& [x ^Integer off ^Integer len]]
+              (if-not (nil? off)
+                (do
+                  (.write sys-out x off len)
+                  (.write writer x off len))
+                (do
+                  (.flush sys-out) (.flush writer))))
+       (flush []
+              (.flush sys-out)
+              (.flush writer))))))
+
+(def ^:dynamic *cloxp-session?* false)
+
 (defn prepare-eval
   [{:keys [op session bindings required-ns code transport] :as msg}]
+  (if-not (get @session #'*cloxp-session?*)
+    (swap! session assoc
+           #'*cloxp-session?* true
+           #'*out* (wrap-out-writer (get @session #'*out*))
+           #'*err* (wrap-out-writer (get @session #'*err*))))
+  #_(swap! session assoc
+         #'*cloxp-session?* true
+         #'*out* (wrap-out-writer (get @session #'*out*))
+         #'*err* (wrap-out-writer (get @session #'*err*)))
   (try
     (if required-ns
       (doseq [ns required-ns]
