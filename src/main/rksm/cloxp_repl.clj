@@ -5,12 +5,16 @@
             [rksm.system-files :refer [file
                                        source-for-ns
                                        file-for-ns
-                                       ns-name->rel-path]]
+                                       ns-name->rel-path
+                                       namespaces-in-dir]]
             [rksm.system-files.cljx :refer [cljx-file?]]
             [cljx.core :as cljx]
             [cljx.rules :as rules]
             [clojure.string :as s]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.tools.namespace.parse :as parse]
+            [clojure.tools.namespace.track :as track]
+            [clojure.tools.namespace.reload :as reload])
   (:import (clojure.lang Compiler)
            (java.io StringReader File)))
 
@@ -178,6 +182,29 @@
                relative-name (or file-name (ns-name->rel-path ns-name ext))]
            (load-file (slurp file) relative-name))
          (throw e)))))
+
+(defn require-namespaces
+  "re-loads(!) namespaces in dependency order"
+  [ns-syms]
+  (let [deps (->> ns-syms
+               (map (fn [n]
+                      (let [src (or (source-for-ns n) "")
+                            decl (src-rdr/read-ns-decl src)
+                            deps (parse/deps-from-ns-decl decl)]
+                        {n deps})))
+               (apply merge))
+        tracker (track/add (track/tracker) deps)]
+    (reload/track-reload tracker)))
+
+(comment
+ (clojure.tools.namespace.dependency/topo-sort
+  (:clojure.tools.namespace.track/deps t2)))
+
+(defn require-namespaces-in-dir
+  [dir & [file-match]]
+  (require-namespaces
+   (namespaces-in-dir
+    dir (or file-match #"\.cljx?$"))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
