@@ -42,13 +42,24 @@
       (if (var? new-def) (alter-meta! new-def merge m))
       new-def)))
 
+(defn- file-name
+  "/foo/bar/baz.clj -> baz.clj"
+  [^String file]
+  (let [sep java.io.File/separator
+        fn-re (re-pattern (format "%1$s([^%1$s]+)$" sep))
+        [_ fn] (re-find fn-re file)]
+    (or fn file)))
+
 (defn eval-form
   "possible keys in opts: :file :add-meta :keep-meta.
   Returns a triple: [value error output]"
-  [form ns & [{file :file, :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
+  [form ns & [{file :file, :or {file *file*}, :as opts}]]
   (let [s (java.io.StringWriter.)
+        file (if (or (nil? file) (empty? file)) "NO_SOURCE_FILE" file)
+        f (str file)
         [v e] (binding [*out* s
-                        *file* (str file)
+                        *file* f
+                        *source-path* (file-name f)
                         *ns* (ensure-ns ns)]
                 (try
                   [(if (src-rdr/def? form)
@@ -134,8 +145,9 @@
       doall)))
 
 (defn eval-changed-from-source
-  [source prev-source ns & [{:keys [file] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
-  (binding [*ns* (ensure-ns ns) *file* (str file)]
+  [source prev-source ns & [{:keys [file] :or {file *file*} :as opts}]]
+  (binding [*ns* (ensure-ns ns)
+            *file* (if (or (nil? file) (empty? file)) "NO_SOURCE_FILE" (str file))]
     (let [objs (src-rdr/read-objs source)
           pseudo-prev-result (map (partial hash-map :parsed)
                                   (src-rdr/read-objs prev-source))]
