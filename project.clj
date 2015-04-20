@@ -5,9 +5,10 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/data.json "0.2.3"]
                  [org.clojure/tools.nrepl "0.2.7"]
+                 [org.clojure/tools.namespace "0.2.8"]
+                 [clj-stacktrace/clj-stacktrace "0.2.8"]
                  [com.keminglabs/cljx "0.6.0"]
-                 [org.rksm/cloxp-source-reader "0.1.2"]
-                 [org.clojure/tools.namespace "0.2.8"]]
+                 [org.rksm/cloxp-source-reader "0.1.2"]]
   :source-paths ["src/main"]
   :test-paths ["src/test"]
   :scm {:url "git@github.com:cloxp/cloxp-repl.git"}
