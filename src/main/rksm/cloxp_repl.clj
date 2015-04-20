@@ -55,11 +55,12 @@
   Returns a triple: [value error output]"
   [form ns & [{file :file, :or {file *file*}, :as opts}]]
   (let [s (java.io.StringWriter.)
-        file (if (or (nil? file) (empty? file)) "NO_SOURCE_FILE" file)
-        f (str file)
+        file (let [f (str file)]
+               (if (or (nil? f) (empty? f))
+                 "NO_SOURCE_FILE" f))
         [v e] (binding [*out* s
-                        *file* f
-                        *source-path* (file-name f)
+                        *file* file
+                        *source-path* (file-name file)
                         *ns* (ensure-ns ns)]
                 (try
                   [(if (src-rdr/def? form)
@@ -147,7 +148,9 @@
 (defn eval-changed-from-source
   [source prev-source ns & [{:keys [file] :or {file *file*} :as opts}]]
   (binding [*ns* (ensure-ns ns)
-            *file* (if (or (nil? file) (empty? file)) "NO_SOURCE_FILE" (str file))]
+            *file* (let [f (str file)]
+                     (if (or (nil? f) (empty? f))
+                       "NO_SOURCE_FILE" f))]
     (let [objs (src-rdr/read-objs source)
           pseudo-prev-result (map (partial hash-map :parsed)
                                   (src-rdr/read-objs prev-source))]
