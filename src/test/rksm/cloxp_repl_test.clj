@@ -10,9 +10,14 @@
                      (str ".clj")
                      clojure.java.io/resource .getFile))
 
+(defmacro codify
+  [& body]
+  `(clojure.string/join "\n" (map str '~body)))
+
 (defmacro lookup-var
   [var-sym]
-  `(let [var# (-> (symbol (str *ns*) (str '~var-sym)) find-var)]
+  `(let [ns-name# (or (namespace '~var-sym) (str *ns*))
+         var# (-> (symbol ns-name# (str (name '~var-sym))) find-var)]
      (if (and var# (bound? var#)) var# nil))) 
 
 (defmacro lookup
@@ -34,7 +39,7 @@
   (binding [*file* this-file]
     (let [expected-meta {:ns *ns*, :name 'x,
                          :file this-file,
-                         :column 19, :line 39
+                         :column 19, :line 44
                          :test "123"}]
       (eval-form '(def x 23) *ns* {:add-meta {:test "123"}})
       (is (= 23 (lookup x)))
@@ -131,6 +136,53 @@
       (eval-changed-from-source code-3 code-2 *ns*)
       (is (= [2 1] (-> (lookup-var y) meta ((juxt :line :column))))))))
 
+(deftest eval-changed-updates-multimethods
+
+  (testing "modifying defmethod"
+    (remove-ns 'multi-test-1)
+    (let [f (java.io.File/createTempFile "multi_test_1" ".clj")
+          source-1 (codify (ns multi-test-1)
+                           (defmulti multi-f (fn [x & _] x))
+                           (defmethod multi-f :a [_ x] (+ x 2)))
+          source-2 (codify (ns multi-test-1)
+                           (defmulti multi-f (fn [x & _] x))
+                           (defmethod multi-f :a [_ x] (+ x 3)))
+          _ (do (spit f source-1) (clojure.core/load-file (str f)))
+          result (eval-changed-from-source source-2 source-1 'multi-test-1)]
+      (is (= 6 ((lookup multi-test-1/multi-f) :a 3)))))
+
+  (testing "modifying defmulti"
+    (remove-ns 'multi-test-2)
+    (let [f (java.io.File/createTempFile "multi_test_2" ".clj")
+          source-1 (codify (ns multi-test-2)
+                           (defmulti multi-f (fn [x & _] x))
+                           (defmethod multi-f :a [_ x] (+ x 2))
+                           (defmethod multi-f :b [_ x] (+ x 3)))
+          source-2 (codify (ns multi-test-2)
+                           (defmulti multi-f (constantly :b))
+                           (defmethod multi-f :a [_ x] (+ x 2))
+                           (defmethod multi-f :b [_ x] (+ x 3)))
+          _ (do (spit f source-1) (clojure.core/load-file (str f)))
+          result (eval-changed-from-source source-2 source-1 'multi-test-2)]
+      (is (= 6 ((lookup multi-test-2/multi-f) :a 3))))))
+
+(deftest eval-string-updates-multimethods
+
+  (testing "modifying defmulti"
+    (remove-ns 'multi-test-2)
+    (let [f (java.io.File/createTempFile "multi_test_2" ".clj")
+          source-1 (codify (ns multi-test-2)
+                           (defmulti multi-f (fn [x & _] x))
+                           (defmethod multi-f :a [_ x] (+ x 2))
+                           (defmethod multi-f :b [_ x] (+ x 3)))
+          source-2 (codify (ns multi-test-2)
+                           (defmulti multi-f (constantly :b))
+                           (defmethod multi-f :a [_ x] (+ x 2))
+                           (defmethod multi-f :b [_ x] (+ x 3)))
+          _ (do (spit f source-1) (clojure.core/load-file (str f)))
+          _ (eval-string source-2 'multi-test-2)]
+      (is (= 6 ((lookup multi-test-2/multi-f) :a 3))))))
+  
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 (comment

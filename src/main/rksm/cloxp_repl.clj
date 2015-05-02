@@ -29,6 +29,11 @@
     (symbol? ns-or-sym) (find-ns ns-or-sym)
     :default ns-or-sym))
 
+(defn- eval-defmulti
+  [form ns & [opts]]
+  (ns-unmap ns (src-rdr/name-of-def form))
+  (eval-def form ns opts))
+
 (defn eval-def
   [form ns & [{:keys [add-meta keep-meta] :as opts}]]
   (let [def? (src-rdr/def? form)
@@ -57,18 +62,19 @@
   (let [s (java.io.StringWriter.)
         file (let [f (str file)]
                (if (or (nil? f) (empty? f))
-                 "NO_SOURCE_FILE" f))
-        [v e] (binding [*out* s
-                        *file* file
-                        *source-path* (file-name file)
-                        *ns* (ensure-ns ns)]
-                (try
-                  [(if (src-rdr/def? form)
-                     (eval-def form ns opts)
-                     (eval form))
-                   nil]
-                  (catch Exception e [nil e])))]
-    [v e (str s)]))
+                 "NO_SOURCE_FILE" f))]
+    (binding [*out* s
+              *file* file
+              *source-path* (file-name file)
+              *ns* (ensure-ns ns)]
+      (try
+        [(cond
+           (src-rdr/defmulti? form) (eval-defmulti form ns opts)
+           (src-rdr/def? form) (eval-def form ns opts)
+           :default (eval form))
+         nil
+         (str s)]
+        (catch Exception e [nil e (str s)])))))
 
 (defn eval-read-obj
   "evaluates meta data objects returned by
@@ -115,35 +121,52 @@
            (find-prev-result old-read-obj)
            {:parsed read-obj})))
 
+
 (defn eval-changed
   "given a list of prev-results maps (:parsed, :out, :error,:value), evaluate
   only those objs that have changed (according to
   rksm.cloxp-repl.code-diff/diff-read-objs). For unmodified objs return the
-  previous eval result (out, error, value)"
+  previous eval result (out, error, value)
+  Simply evaluating the top-level forms and defs that have changed is not
+  always enough. For example, when a multi method declaration changes it and
+  all defmethods need to be re-evaluated."
   [objs prev-result ns & [{:keys [unmap-removed? eval-unchanged-exprs?]
                            :or {unmap-removed? true, eval-unchanged-exprs? true}
                            :as opts}]]
   (let [changed (diff/diff-read-objs (map :parsed prev-result) objs)]
     (->> changed
-      (keep (fn [{:keys [parsed parsed-old change]}]
-              (let [n (:name parsed)
-                    def? (boolean n)]
-                (case change
-                  :unmodified (cond
-                                def? (do
-                                       ; if it's a def don't re-eval but update meta data
-                                       (update-meta-from-read-obj n ns parsed)
-                                       (non-eval-result parsed parsed-old prev-result))
-                                (not eval-unchanged-exprs?) (non-eval-result parsed parsed-old prev-result)
-                                :default (eval-read-obj parsed ns opts))
-                  :modified (eval-read-obj parsed ns opts)
-                  :added (eval-read-obj parsed ns opts)
-                  :removed (do
-                             (if unmap-removed?
-                               (if-let [sym (:name parsed)]
-                                 (ns-unmap ns sym)))
-                             nil)))))
-      doall)))
+      (reduce (fn [{:keys [results changed-defmulti] :as result}
+                   {:keys [parsed parsed-old change]}]
+                (let [n (:name parsed)
+                      def? (boolean n)
+                      form (:form parsed)
+                      defmulti? (src-rdr/defmulti? form)
+                      change (if (and (= :unmodified change)
+                                      (src-rdr/defmethod? form)
+                                      (contains? changed-defmulti n))
+                               :modified change)
+                      evaled (case change
+                               :unmodified (cond
+                                             def? (do
+                                                    ; if it's a def don't re-eval but update meta data
+                                                    (update-meta-from-read-obj n ns parsed)
+                                                    (non-eval-result parsed parsed-old prev-result))
+                                             (not eval-unchanged-exprs?) (non-eval-result parsed parsed-old prev-result)
+                                             :default (eval-read-obj parsed ns opts))
+                               :modified (do
+                                           (if defmulti? (ns-unmap ns n))
+                                           (eval-read-obj parsed ns opts))
+                               :added (eval-read-obj parsed ns opts)
+                               :removed (do
+                                          (if unmap-removed?
+                                            (if-let [sym n]
+                                              (ns-unmap ns sym)))
+                                          nil))]
+                  (cond-> result
+                    evaled (update-in [:results] conj evaled)
+                    defmulti? (update-in [:changed-defmulti] conj n))))
+              {:results [], :changed-defmulti #{}})
+      :results doall)))
 
 (defn eval-changed-from-source
   [source prev-source ns & [{:keys [file] :or {file *file*} :as opts}]]

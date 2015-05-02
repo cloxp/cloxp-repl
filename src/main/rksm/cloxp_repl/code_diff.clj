@@ -23,10 +23,17 @@
   (= (-> a :source trim)
      (-> b :source trim)))
 
+(defn- def-map
+  [defs]
+  (apply hash-map
+    (mapcat (fn [{:keys [name defmethod-qualifier] :as obj}]
+              [(str name "-" defmethod-qualifier) obj])
+            defs)))
+
 (defn- diff-defs
   [old-defs new-defs]
-  (let [old-defs-map (apply hash-map (mapcat (juxt :name identity) old-defs))
-        new-defs-map (apply hash-map (mapcat (juxt :name identity) new-defs))
+  (let [old-defs-map (def-map old-defs)
+        new-defs-map (def-map new-defs)
         old-names (-> old-defs-map keys set)
         new-names (-> new-defs-map keys set)
         removed (difference old-names new-names)
@@ -44,6 +51,14 @@
      :unmodified (map vector
                       (vals (select-keys old-defs-map unchanged))
                       (vals (select-keys new-defs-map unchanged)))}))
+
+(comment
+ 
+ (def-map (src-rdr/read-objs "(defmulti multi-f x) (defmethod multi-f :a [_ x] (+ x 3))"))
+ (def-map (src-rdr/read-objs "(def x 23)"))
+ (diff-defs
+  (src-rdr/read-objs "(defmulti multi-f x) (defmethod multi-f :a [_ x] (+ x 3))")
+  (src-rdr/read-objs "(defmulti multi-f y) (defmethod multi-f :a [_ x] (+ x 3))")))
 
 (defn- diff-defs-as-change
   [old-defs new-defs]

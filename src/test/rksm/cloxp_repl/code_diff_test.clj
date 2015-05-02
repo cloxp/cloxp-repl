@@ -2,6 +2,10 @@
   (:require [clojure.test :refer :all]
             [rksm.cloxp-repl.code-diff :refer :all]))
 
+(defmacro codify
+  [& body]
+  `(clojure.string/join "\n" (map str '~body)))
+
 (deftest diff-result
   (let [result (diff-source "(+ x 2)\n3" "3 4")
         expected [{:change :unmodified,
@@ -55,6 +59,14 @@
   (is (= [[:unmodified "(def x 23)\n"]]
          (map (juxt :change (comp :source :parsed))
               (diff-source "(def x 23)" "(def x 23)")))))
+
+(deftest defmulti-included
+  (is (= '("(defmulti multi-f (fn [x & _] x))\n")
+         (map (comp :source :parsed)(remove #(= :unmodified (:change %))
+                  (diff-source (codify (defmulti multi-f (fn [x & _] (+ x 1)))
+                                       (defmethod multi-f :a [_ x] (+ x 2)))
+                               (codify (defmulti multi-f (fn [x & _] x))
+                                       (defmethod multi-f :a [_ x] (+ x 2)))))))))
 
 (comment
  (run-tests *ns*)
