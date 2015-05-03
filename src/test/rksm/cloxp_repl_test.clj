@@ -48,6 +48,15 @@
       (is (= 23 (lookup x)))
       (is (= (dissoc expected-meta :test) (-> x lookup-var meta (dissoc :end-line :end-column)))))))
 
+(deftest eval-sets-source-pos
+  (binding [*file* this-file]
+    (let [expected-meta {:ns *ns*, :name 'x,
+                         :file this-file,
+                         :column 19, :line 44
+                         :test "123"}]
+      (eval-string (codify (def x 23)) *ns* {:line-offset 2 :column-offset 3})
+      (is (= [3 4] (-> x lookup-var meta ((juxt :line :column))))))))
+
 (deftest eval-multiple-defs
   (eval-forms ['(def x 23) '(def y 24)] *ns*)
   (is (= 23 (lookup x)))

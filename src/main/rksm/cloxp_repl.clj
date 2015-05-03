@@ -22,17 +22,18 @@
        :doc "can be set by tooling to have larger code chunks accessible without
        special escaping"} *repl-source*)
 
+(def ^{:dynamic true,
+       :doc "affects line in meta data when eval'ing defs"} *line-offset* 0)
+
+(def ^{:dynamic true,
+       :doc "affects column in meta data when eval'ing defs"} *column-offset* 0)
+
 (defn- ensure-ns
   [ns-or-sym]
   (cond
     (nil? ns-or-sym) *ns*
     (symbol? ns-or-sym) (find-ns ns-or-sym)
     :default ns-or-sym))
-
-(defn- eval-defmulti
-  [form ns & [opts]]
-  (ns-unmap ns (src-rdr/name-of-def form))
-  (eval-def form ns opts))
 
 (defn eval-def
   [form ns & [{:keys [add-meta keep-meta] :as opts}]]
@@ -46,6 +47,11 @@
     (let [new-def (eval form)]
       (if (var? new-def) (alter-meta! new-def merge m))
       new-def)))
+
+(defn- eval-defmulti
+  [form ns & [opts]]
+  (ns-unmap ns (src-rdr/name-of-def form))
+  (eval-def form ns opts))
 
 (defn- file-name
   "/foo/bar/baz.clj -> baz.clj"
@@ -84,9 +90,6 @@
    & [{:keys [line-offset throw-errors?] :or {line-offset 0, throw-errors? false} :as opts}]]
   (let [[v e o] (eval-form form ns (update-in opts [:add-meta] merge parsed))]
     (if (and e throw-errors?) (throw e))
-    (if (and (not e) v (not= 0 line-offset) (var? v))
-      (alter-meta! v (comp #(update-in % [:line] + line-offset)
-                           #(update-in % [:end-line] + line-offset))))
     {:parsed parsed :value v :error e :out o}))
 
 (defn eval-forms
@@ -97,10 +100,12 @@
   "evaluates all toplevel expressions read from `string` and returns a map with
   :parsed :value :out and :error. :parsed is the result from
   rksm.cloxp-source-reader.core/read-objs"
-  [string ns & [{:keys [file] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
+  [string ns & [{:keys [file line-offset column-offset] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
   (let [cljx? (boolean (re-find #"\.cljx$" (str file)))]
     (binding [*ns* (ensure-ns ns) *file* (str file)]
-      (->> (src-rdr/read-objs string {:cljx? cljx?})
+      (->> (src-rdr/read-objs string {:cljx? cljx?
+                                      :line-offset (or line-offset *line-offset*)
+                                      :column-offset (or column-offset *column-offset*)})
        (map #(eval-read-obj % ns (merge opts {:file file})))
        doall))))
 
@@ -169,14 +174,20 @@
       :results doall)))
 
 (defn eval-changed-from-source
-  [source prev-source ns & [{:keys [file] :or {file *file*} :as opts}]]
+  [source prev-source ns & [{:keys [file line-offset column-offset]
+                             :or {file *file*} :as opts}]]
   (binding [*ns* (ensure-ns ns)
             *file* (let [f (str file)]
                      (if (or (nil? f) (empty? f))
                        "NO_SOURCE_FILE" f))]
-    (let [objs (src-rdr/read-objs source)
+    (let [cljx? (boolean (re-find #"\.cljx$" *file*))
+          objs (src-rdr/read-objs source {:cljx? cljx?
+                                          :line-offset (or line-offset *line-offset*)
+                                          :column-offset (or column-offset *column-offset*)})
           pseudo-prev-result (map (partial hash-map :parsed)
-                                  (src-rdr/read-objs prev-source))]
+                                  (src-rdr/read-objs prev-source {:cljx? cljx?
+                                                                  :line-offset (or line-offset *line-offset*)
+                                                                  :column-offset (or column-offset *column-offset*)}))]
       (eval-changed objs pseudo-prev-result ns opts))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

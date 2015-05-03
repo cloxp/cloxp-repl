@@ -93,10 +93,6 @@
            #'*cloxp-session?* true
            #'*out* (wrap-out-writer (get @session #'*out*))
            #'*err* (wrap-out-writer (get @session #'*err*))))
-  #_(swap! session assoc
-         #'*cloxp-session?* true
-         #'*out* (wrap-out-writer (get @session #'*out*))
-         #'*err* (wrap-out-writer (get @session #'*err*)))
   (try
     (if required-ns
       (doseq [ns required-ns]
