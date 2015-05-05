@@ -72,8 +72,7 @@
           :name 'y,
           :line 4, :column 1,
           :file this-file
-          :source "(def y 23)\n"
-          :form '(def y 23)}
+          :source "(def y 23)\n"}
          (-> y lookup-var meta (dissoc :end-line :end-column)))))
 
 (deftest eval-changed-test
@@ -195,5 +194,7 @@
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 (comment
- (run-tests 'rksm.cloxp-repl-test)
+ (let [w (java.io.StringWriter.)]
+   (binding [*test-out* w]
+    (run-tests *ns*) w))
  )
