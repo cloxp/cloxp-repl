@@ -88,7 +88,8 @@
   :out and :error."
   [{:keys [form name] :as parsed} ns
    & [{:keys [line-offset throw-errors?] :or {line-offset 0, throw-errors? false} :as opts}]]
-  (let [[v e o] (eval-form form ns (update-in opts [:add-meta] merge parsed))]
+  (let [add-to-meta (select-keys parsed [:line :column :source])
+        [v e o] (eval-form form ns (update-in opts [:add-meta] merge add-to-meta))]
     (if (and e throw-errors?) (throw e))
     {:parsed parsed :value v :error e :out o}))
 
