@@ -39,5 +39,5 @@
   (cond
     (and (instance? clojure.lang.ExceptionInfo e)
          (= (-> e .getData :type) :js-eval-exception)) (process-js-eval-exception e)
-    (instance? Exception e) (process-default-clj-exception e)
+    (instance? java.lang.Throwable e) (process-default-clj-exception e)
     :default {:printed (str e)}))
