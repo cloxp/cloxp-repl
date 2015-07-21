@@ -105,6 +105,7 @@
   (let [cljx? (boolean (re-find #"\.cljx$" (str file)))]
     (binding [*ns* (ensure-ns ns) *file* (str file)]
       (->> (src-rdr/read-objs string {:cljx? cljx?
+                                      :features #{:clj}
                                       :line-offset (or line-offset *line-offset*)
                                       :column-offset (or column-offset *column-offset*)})
        (map #(eval-read-obj % ns (merge opts {:file file})))
@@ -221,6 +222,14 @@
         (eval-changed-from-source old-source ns {:file path, :throw-errors? true})
         last :value)
       (compiler-load source path file-name))))
+
+(defn load-ns-in-jar
+  [ns-name ^java.io.File jar-file & [ext]]
+  (let [path (rksm.system-files/ns-name->rel-path ns-name ext)
+        file (rksm.system-files/file (str (.getPath jar-file) "!/" path))]
+    (if (.exists file)
+      (let [source (slurp file)]
+        (load-file source path {:ns ns-name})))))
 
 (defn require-ns
   [ns-sym & [file-name]]
