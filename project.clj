@@ -2,13 +2,13 @@
   :description "Source reading, parsing, and querying for cloxp."
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/data.json "0.2.3"]
-                 [org.clojure/tools.nrepl "0.2.7"]
-                 [org.clojure/tools.namespace "0.2.8"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
+                 [org.clojure/data.json "0.2.6"]
+                 [org.clojure/tools.nrepl "0.2.10"]
+                 [org.clojure/tools.namespace "0.2.10"]
                  [clj-stacktrace/clj-stacktrace "0.2.8"]
                  [com.keminglabs/cljx "0.6.0"]
-                 [org.rksm/cloxp-source-reader "0.1.6"]]
+                 [org.rksm/cloxp-source-reader "0.1.8"]]
   :source-paths ["src/main"]
   :test-paths ["src/test"]
   :scm {:url "git@github.com:cloxp/cloxp-repl.git"}
