@@ -1,6 +1,7 @@
 (ns rksm.cloxp-repl.live-eval
   (:require [clojure.string :as s]
             [clojure.set :refer [difference union]]
+            [clojure.repl :refer [pst]]
             [rksm.cloxp-repl :refer [eval-changed]]
             [rksm.cloxp-source-reader.core :as src-rdr]))
 
@@ -57,7 +58,7 @@
 
 (defmethod process-result java.lang.Exception
   [{e :error :as result}]
-  (assoc result :printed (pr-str e)))
+  (assoc result :printed (str e)))
 
 (defmethod process-result :default
   [{x :value :as result}]
