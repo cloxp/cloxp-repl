@@ -7,9 +7,6 @@
                                        file-for-ns
                                        ns-name->rel-path
                                        namespaces-in-dir]]
-            [rksm.system-files.cljx :refer [cljx-file?]]
-            [cljx.core :as cljx]
-            [cljx.rules :as rules]
             [clojure.string :as s]
             [clojure.java.io :as io]
             [clojure.tools.namespace.parse :as parse]
@@ -102,14 +99,12 @@
   :parsed :value :out and :error. :parsed is the result from
   rksm.cloxp-source-reader.core/read-objs"
   [string ns & [{:keys [file line-offset column-offset] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
-  (let [cljx? (boolean (re-find #"\.cljx$" (str file)))]
-    (binding [*ns* (ensure-ns ns) *file* (str file)]
-      (->> (src-rdr/read-objs string {:cljx? cljx?
-                                      :features #{:clj}
-                                      :line-offset (or line-offset *line-offset*)
-                                      :column-offset (or column-offset *column-offset*)})
-       (map #(eval-read-obj % ns (merge opts {:file file})))
-       doall))))
+  (binding [*ns* (ensure-ns ns) *file* (str file)]
+    (->> (src-rdr/read-objs string {:features #{:clj}
+                                    :line-offset (or line-offset *line-offset*)
+                                    :column-offset (or column-offset *column-offset*)})
+      (map #(eval-read-obj % ns (merge opts {:file file})))
+      doall)))
 
 (defn- update-meta-from-read-obj
   [sym ns read-obj]
@@ -182,13 +177,10 @@
             *file* (let [f (str file)]
                      (if (or (nil? f) (empty? f))
                        "NO_SOURCE_FILE" f))]
-    (let [cljx? (boolean (re-find #"\.cljx$" *file*))
-          objs (src-rdr/read-objs source {:cljx? cljx?
-                                          :line-offset (or line-offset *line-offset*)
+    (let [objs (src-rdr/read-objs source {:line-offset (or line-offset *line-offset*)
                                           :column-offset (or column-offset *column-offset*)})
           pseudo-prev-result (map (partial hash-map :parsed)
-                                  (src-rdr/read-objs prev-source {:cljx? cljx?
-                                                                  :line-offset (or line-offset *line-offset*)
+                                  (src-rdr/read-objs prev-source {:line-offset (or line-offset *line-offset*)
                                                                   :column-offset (or column-offset *column-offset*)}))]
       (eval-changed objs pseudo-prev-result ns opts))))
 
@@ -204,15 +196,9 @@
 
 (defn load-file
   "Load-file equivalent"
-  [source path & [{:keys [ns old-source cljx-rules] :as opts}]]
+  [source path & [{:keys [ns old-source] :as opts}]]
   (let [file-name (some-> path io/file .getName)
         ext (some->> file-name (re-find #"\.[^\.]+$"))
-        cljx? (= ext ".cljx")
-        x-rules (if cljx? (or cljx-rules rules/clj-rules))
-        source (if cljx? (cljx/transform source x-rules) source)
-        old-source (if (and old-source cljx?)
-                     (cljx/transform old-source x-rules)
-                     old-source)
         ns (if old-source
              (or ns
                  (src-rdr/read-ns-sym source)
@@ -236,7 +222,7 @@
   (try 
     (require ns-sym :reload)
     (catch java.io.FileNotFoundException e
-      (if-let [file (file-for-ns ns-sym file-name #".cljx?$")]
+      (if-let [file (file-for-ns ns-sym file-name #".cljc?$")]
          (let [ext (-> file .getName (re-find #"\.[^\.]+$"))
                relative-name (or file-name (ns-name->rel-path ns-name ext))]
            (load-file (slurp file) relative-name))
@@ -263,7 +249,7 @@
   [dir & [file-match]]
   (require-namespaces
    (namespaces-in-dir
-    dir (or file-match #"\.cljx?$"))))
+    dir (or file-match #"\.cljc?$"))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -271,9 +257,6 @@
 
  (compiler-load "(+ 1 1) (+ 1 2)" "foo.clj")
  (load-file "(+ 1 1) (+ 1 2)" "foo.clj")
- (load-file
-  "(+ 1 1) #+cljs (+ 1 2) #+clj (+ 1 3)" "foo.cljx"
-  {:old-source "(+ 1 1) (+ 1 2)"})
  
  (let [prev-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 2)")
        new-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 3)")

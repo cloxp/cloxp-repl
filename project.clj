@@ -7,7 +7,6 @@
                  [org.clojure/tools.nrepl "0.2.10"]
                  [org.clojure/tools.namespace "0.2.10"]
                  [clj-stacktrace/clj-stacktrace "0.2.8"]
-                 [com.keminglabs/cljx "0.6.0"]
                  [org.rksm/cloxp-source-reader "0.1.8"]]
   :source-paths ["src/main"]
   :test-paths ["src/test"]
