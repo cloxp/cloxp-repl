@@ -32,6 +32,27 @@
     (symbol? ns-or-sym) (find-ns ns-or-sym)
     :default ns-or-sym))
 
+(defn- read-string-with-features
+  "via rksm.cloxp-source-reader.core/read-objs"
+  [string ns {:keys [features file line-offset column-offset] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]
+  (binding [*ns* (ensure-ns ns)
+            *file* (str file)]
+    (src-rdr/read-objs string {:features features
+                               :line-offset (or line-offset *line-offset*)
+                               :column-offset (or column-offset *column-offset*)})))
+
+(defn read-clj-string
+  "opts support :file :line-offset :column-offset :features. Returns a
+  collection of parsed top-level expressions in the form of
+  {:line NUMBER :column NUMBER
+   :end-line NUMBER :end-column NUMBER
+   :form SEQ :source STRING}"
+  [string & [ns opts]]
+  (let [ns (or ns 'user)
+        opts (if (contains? opts :features)
+               opts (assoc opts :features #{:clj}))]
+    (read-string-with-features string ns opts)))
+
 (defn eval-def
   [form ns & [{:keys [add-meta keep-meta] :as opts}]]
   (let [def? (src-rdr/def? form)
@@ -100,9 +121,9 @@
   rksm.cloxp-source-reader.core/read-objs"
   [string ns & [{:keys [file line-offset column-offset] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
   (binding [*ns* (ensure-ns ns) *file* (str file)]
-    (->> (src-rdr/read-objs string {:features #{:clj}
-                                    :line-offset (or line-offset *line-offset*)
-                                    :column-offset (or column-offset *column-offset*)})
+    (->> (read-clj-string string {:features #{:clj}
+                                  :line-offset (or line-offset *line-offset*)
+                                  :column-offset (or column-offset *column-offset*)})
       (map #(eval-read-obj % ns (merge opts {:file file})))
       doall)))
 
@@ -177,11 +198,13 @@
             *file* (let [f (str file)]
                      (if (or (nil? f) (empty? f))
                        "NO_SOURCE_FILE" f))]
-    (let [objs (src-rdr/read-objs source {:line-offset (or line-offset *line-offset*)
+    (let [objs (src-rdr/read-objs source {:features nil
+                                          :line-offset (or line-offset *line-offset*)
                                           :column-offset (or column-offset *column-offset*)})
           pseudo-prev-result (map (partial hash-map :parsed)
-                                  (src-rdr/read-objs prev-source {:line-offset (or line-offset *line-offset*)
-                                                                  :column-offset (or column-offset *column-offset*)}))]
+                                  (read-clj-string prev-source {:features nil
+                                                                :line-offset (or line-offset *line-offset*)
+                                                                :column-offset (or column-offset *column-offset*)}))]
       (eval-changed objs pseudo-prev-result ns opts))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -258,8 +281,8 @@
  (compiler-load "(+ 1 1) (+ 1 2)" "foo.clj")
  (load-file "(+ 1 1) (+ 1 2)" "foo.clj")
  
- (let [prev-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 2)")
-       new-objs (src-rdr/read-objs "(+ 3 4) (def x 23) (+ 1 3)")
+ (let [prev-objs (read-clj-string "(+ 3 4) (def x 23) (+ 1 2)")
+       new-objs (read-clj-string "(+ 3 4) (def x 23) (+ 1 3)")
        env (map (fn [r] {:parsed r :value 'old}) prev-objs)]
    (->> (eval-changed new-objs env 'user) (map :value)))
  ; => [7 'old 4]
