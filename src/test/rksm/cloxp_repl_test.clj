@@ -136,13 +136,14 @@
 
 (deftest update-meta-of-unchanged-defs
   (testing "only eval changed top level forms"
-    (let [code-1 ""
-          code-2 "(def x 23) (def y 24)"
-          code-3 "(def x 23) \n(def y 24)"]
-      (ns-unmap *ns* 'x)
-      (eval-changed-from-source code-2 code-1 *ns*)
-      (eval-changed-from-source code-3 code-2 *ns*)
-      (is (= [2 1] (-> (lookup-var y) meta ((juxt :line :column))))))))
+    (binding [*line-offset* 0]
+      (let [code-1 ""
+            code-2 "(def x 23) (def y 24)"
+            code-3 "(def x 23) \n(def y 24)"]
+        (ns-unmap *ns* 'x)
+        (eval-changed-from-source code-2 code-1 *ns*)
+        (eval-changed-from-source code-3 code-2 *ns*)
+        (is (= [2 1] (-> (lookup-var y) meta ((juxt :line :column)))))))))
 
 (deftest eval-changed-updates-multimethods
 

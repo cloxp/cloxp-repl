@@ -121,9 +121,9 @@
   rksm.cloxp-source-reader.core/read-objs"
   [string ns & [{:keys [file line-offset column-offset] :or {file (or *file* "NO_SOURCE_FILE")} :as opts}]]
   (binding [*ns* (ensure-ns ns) *file* (str file)]
-    (->> (read-clj-string string {:features #{:clj}
-                                  :line-offset (or line-offset *line-offset*)
-                                  :column-offset (or column-offset *column-offset*)})
+    (->> (read-clj-string string ns {:features #{:clj}
+                                     :line-offset (or line-offset *line-offset*)
+                                     :column-offset (or column-offset *column-offset*)})
       (map #(eval-read-obj % ns (merge opts {:file file})))
       doall)))
 
@@ -202,9 +202,9 @@
                                           :line-offset (or line-offset *line-offset*)
                                           :column-offset (or column-offset *column-offset*)})
           pseudo-prev-result (map (partial hash-map :parsed)
-                                  (read-clj-string prev-source {:features nil
-                                                                :line-offset (or line-offset *line-offset*)
-                                                                :column-offset (or column-offset *column-offset*)}))]
+                                  (read-clj-string prev-source *ns* {:features nil
+                                                                     :line-offset (or line-offset *line-offset*)
+                                                                     :column-offset (or column-offset *column-offset*)}))]
       (eval-changed objs pseudo-prev-result ns opts))))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
