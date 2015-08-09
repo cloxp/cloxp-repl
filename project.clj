@@ -5,7 +5,7 @@
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/tools.nrepl "0.2.10"]
-                 [org.clojure/tools.namespace "0.2.10"]
+                 [org.clojure/tools.namespace "0.2.11"]
                  [clj-stacktrace/clj-stacktrace "0.2.8"]
                  [org.rksm/cloxp-source-reader "0.1.9-SNAPSHOT"]]
   :source-paths ["src/main"]
