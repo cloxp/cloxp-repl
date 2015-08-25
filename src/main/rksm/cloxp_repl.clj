@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [load-file])
   (:require [rksm.cloxp-source-reader.core :as src-rdr]
             [rksm.cloxp-repl.code-diff :as diff]
+            [rksm.cloxp-repl.MultiWriter :refer [multi-writer?]]
             [rksm.system-files :refer [file
                                        source-for-ns
                                        file-for-ns
@@ -83,22 +84,28 @@
   "possible keys in opts: :file :add-meta :keep-meta.
   Returns a triple: [value error output]"
   [form ns & [{file :file, :or {file *file*}, :as opts}]]
-  (let [s (java.io.StringWriter.)
+  (let [string-writer (java.io.StringWriter.)
+        writer (if (multi-writer? *out*)
+                 (doto *out* (.pushWriter string-writer))
+                 string-writer)
         file (let [f (str file)]
                (if (or (nil? f) (empty? f))
                  "NO_SOURCE_FILE" f))]
-    (binding [*out* s
+    (binding [*out* writer
               *file* file
               *source-path* (file-name file)
               *ns* (ensure-ns ns)]
-      (try
-        [(cond
-           (src-rdr/defmulti? form) (eval-defmulti form ns opts)
-           (src-rdr/def? form) (eval-def form ns opts)
-           :default (eval form))
-         nil
-         (str s)]
-        (catch Exception e [nil e (str s)])))))
+      (conj
+       (try
+         [(cond
+            (src-rdr/defmulti? form) (eval-defmulti form ns opts)
+            (src-rdr/def? form) (eval-def form ns opts)
+            :default (eval form))
+          nil]
+         (catch Exception e [nil e]))
+       (do
+         (when (multi-writer? writer) (.popWriter writer))
+         (str string-writer))))))
 
 (defn eval-read-obj
   "evaluates meta data objects returned by

@@ -1,11 +1,12 @@
 (ns rksm.cloxp-repl.nrepl
   (:require [clojure.tools.nrepl.transport :as t]
             [clojure.tools.nrepl.middleware :refer (set-descriptor!)]
-            [clojure.tools.nrepl.middleware.interruptible-eval :as eval])
-  (:use [clojure.pprint :only (pprint)]
-        [clojure.tools.nrepl.misc :only (response-for)]
-        [clojure.tools.nrepl.middleware :as middleware :only (set-descriptor!)])
-  (:import clojure.tools.nrepl.transport.Transport))
+            [clojure.tools.nrepl.middleware.interruptible-eval :as eval]
+            [clojure.tools.nrepl.misc :refer (response-for)]
+            [clojure.pprint :refer (pprint)])
+  (:import clojure.tools.nrepl.transport.Transport
+           (java.io PrintWriter)
+           (rksm.cloxp-repl MultiWriter)))
 
 ; -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 ; printing values
@@ -58,7 +59,7 @@
 (def default-bindings {"clojure.core/*print-length*" nil
                        "clojure.core/*file*" nil})
 
-(defn- wrap-out-writer
+(defn- system-and-string-writer
   "The default writer attached to nrepl sessions will completely capture all
   output. Cloxp will get the contents of *err* and *out* when the evaluation is
   done and present them to the user, however, computations started in that
@@ -66,33 +67,43 @@
   does not record output send after the evaluation is done we will pipe all
   output by default to system out as well, this way users can watch the process
   for additional output."
-  [^java.io.Writer writer]
-  (let [sys-out (java.io.PrintWriter. System/out)]
-    (java.io.PrintWriter.
-     (proxy [java.io.Writer] []
-       (close []
-              (.flush sys-out)
-              (.flush writer))
-       (write [& [x ^Integer off ^Integer len]]
-              (if-not (nil? off)
-                (do
-                  (.write sys-out x off len)
-                  (.write writer x off len))
-                (do
-                  (.flush sys-out) (.flush writer))))
-       (flush []
-              (.flush sys-out)
-              (.flush writer))))))
+  ([]
+   (system-and-string-writer System/out))
+  ([^java.io.PrintStream system-stream]
+   (let [out-writer (java.io.PrintWriter. system-stream)
+         string-writer (atom nil)
+         clear-string-writer! (fn [] (reset! string-writer (java.io.StringWriter.)))
+         string-writer-enabled? (atom false)]
+     (clear-string-writer!)
+     {:clear-string-writer! clear-string-writer!
+      :enable-string-writer! (fn [] (reset! string-writer-enabled? true))
+      :disable-string-writer! (fn [] (reset! string-writer-enabled? false))
+      :writer (proxy [java.io.PrintWriter] [out-writer]
+                (close []  (.flush ^java.io.Writer this))
+                (write [& [x ^Integer off ^Integer len]]
+                       (let [writer (if @string-writer @string-writer out-writer)]
+                         (cond
+                           (number? x) (.append writer (char x))
+                           (not off) (.append writer x)
+                           (instance? CharSequence x) (.append writer ^CharSequence x off len)
+                           :else (.write writer ^chars x off len)))
+                       (.flush ^java.io.Writer this))
+                (flush []
+                       (.flush @string-writer)
+                       (.flush out-writer))
+                (toString [] (str @string-writer)))})))
 
 (def ^:dynamic *cloxp-session?* false)
+(def ^:dynamic *cloxp-out* nil)
+(def ^:dynamic *cloxp-err* nil)
 
 (defn prepare-eval
   [{:keys [op session bindings required-ns code transport] :as msg}]
   (if-not (get @session #'*cloxp-session?*)
     (swap! session assoc
            #'*cloxp-session?* true
-           #'*out* (wrap-out-writer (get @session #'*out*))
-           #'*err* (wrap-out-writer (get @session #'*err*))))
+           #'*cloxp-out* (MultiWriter. (PrintWriter. System/out))
+           #'*cloxp-err* (MultiWriter. (PrintWriter. System/err))))
   (try
     (if required-ns
       (doseq [ns required-ns]

@@ -2,7 +2,7 @@
   (:require [clj-stacktrace.repl :as strace]
             [rksm.cloxp-repl.util :refer [line-break-string]]))
 
-(defn- process-js-eval-exception
+(defn process-js-eval-exception
   [e]
   (let [{:keys [form js repl-env error]} (.getData e)
         {msg :value trace :stacktrace} error

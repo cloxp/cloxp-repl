@@ -11,6 +11,7 @@
   :source-paths ["src/main"]
   :test-paths ["src/test"]
   :scm {:url "git@github.com:cloxp/cloxp-repl.git"}
+  :aot [rksm.cloxp-repl.MultiWriter]
   :pom-addition [:developers [:developer
                               [:name "Robert Krahn"]
                               [:url "http://robert.kra.hn"]
