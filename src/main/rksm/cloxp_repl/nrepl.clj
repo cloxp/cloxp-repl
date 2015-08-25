@@ -59,40 +59,6 @@
 (def default-bindings {"clojure.core/*print-length*" nil
                        "clojure.core/*file*" nil})
 
-(defn- system-and-string-writer
-  "The default writer attached to nrepl sessions will completely capture all
-  output. Cloxp will get the contents of *err* and *out* when the evaluation is
-  done and present them to the user, however, computations started in that
-  evaluation will still have the writers bound to the nrepl output. Since cloxp
-  does not record output send after the evaluation is done we will pipe all
-  output by default to system out as well, this way users can watch the process
-  for additional output."
-  ([]
-   (system-and-string-writer System/out))
-  ([^java.io.PrintStream system-stream]
-   (let [out-writer (java.io.PrintWriter. system-stream)
-         string-writer (atom nil)
-         clear-string-writer! (fn [] (reset! string-writer (java.io.StringWriter.)))
-         string-writer-enabled? (atom false)]
-     (clear-string-writer!)
-     {:clear-string-writer! clear-string-writer!
-      :enable-string-writer! (fn [] (reset! string-writer-enabled? true))
-      :disable-string-writer! (fn [] (reset! string-writer-enabled? false))
-      :writer (proxy [java.io.PrintWriter] [out-writer]
-                (close []  (.flush ^java.io.Writer this))
-                (write [& [x ^Integer off ^Integer len]]
-                       (let [writer (if @string-writer @string-writer out-writer)]
-                         (cond
-                           (number? x) (.append writer (char x))
-                           (not off) (.append writer x)
-                           (instance? CharSequence x) (.append writer ^CharSequence x off len)
-                           :else (.write writer ^chars x off len)))
-                       (.flush ^java.io.Writer this))
-                (flush []
-                       (.flush @string-writer)
-                       (.flush out-writer))
-                (toString [] (str @string-writer)))})))
-
 (def ^:dynamic *cloxp-session?* false)
 (def ^:dynamic *cloxp-out* nil)
 (def ^:dynamic *cloxp-err* nil)
